@@ -320,7 +320,7 @@ int main(int argc, char* argv[]) {
     thread videoThread(videoRoutine);
     vector<thread> infThreads;
     for (int i = 0; i < NUM_VPUS; ++i) {
-        infThreads.push_back(thread(inferenceRoutine, "/person-detection-0200.bin", "/person-detection-0200.xml"));
+        infThreads.push_back(thread(inferenceRoutine, "/model.bin", "/model.xml"));
     }
 
     // Wait until all threads have exited.

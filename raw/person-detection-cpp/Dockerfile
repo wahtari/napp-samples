@@ -4,8 +4,8 @@ FROM wahtari/nlab:$dockerversion-runtime-ncam-plus
 LABEL maintainer="team@wahtari.io"
 
 COPY controller-libs/cpp/*.so /usr/local/lib/
-COPY person-detection-0200.bin /person-detection-0200.bin
-COPY person-detection-0200.xml /person-detection-0200.xml
+COPY model/person-detection-0200.bin /model.bin
+COPY model/person-detection-0200.xml /model.xml
 COPY sample /sample
 
 ENTRYPOINT ["/sample"]
