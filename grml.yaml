@@ -1,0 +1,68 @@
+env:
+    GOPRIVATE:  git.wahtari.m
+    DOCKERHOST: docker.wahtari.m
+    DOCKERREPO: nlab
+    DOCKERVER:  v0.0.22
+    BINDIR:     ${ROOT}/bin
+    BUILDDIR:   ${ROOT}/build
+
+options:
+    static: false
+    runtime:
+        - openvino
+        - base
+        - cuda
+        - qt
+    runopts:
+        - USB
+        - default
+        - DRI
+        - GUI
+        - rootUSB
+        - rootAll
+
+commands:
+    clean:
+        help: clean the build files
+        exec: |
+            rm -rf "${BINDIR}" "${BUILDDIR}"
+
+    build:
+        help: build all targets.
+        deps: 
+            - build.raw
+        commands:
+            raw:
+                help: build all raw targets.
+                deps:
+                    - build.raw.person-detection-cpp
+                commands:
+                    person-detection-cpp:
+                        help: build the person detection C++ raw sample.
+                        exec: |
+                            . scripts/grml.sh
+
+                            # Build the sample application.
+                            DIR=raw/person-detection-cpp
+                            sandbox /bin/bash -c "\
+                                cmake -S /work/${DIR} -B /work/build/${DIR} && \
+                                (cd /work/build/${DIR} && make) && \
+                                cp /work/build/${DIR}/sample /work/${DIR} \
+                            "
+
+                            # Build the docker container.
+                            docker build \
+                                --tag wahtari/person-detection-cpp-raw \
+                                --build-arg dockerversion=${DOCKERVER} \
+                                "${ROOT}"/${DIR}
+
+                            # Save the docker container as tar archive.
+                            docker save \
+                                --output "${BINDIR}/${builder}/wahtari-person-detection-cpp-raw.docker.tar" \
+                                wahtari/person-detection-cpp-raw
+            
+    run:
+        help: run commands
+        exec: |
+            . scripts/grml.sh
+            sandboxRun /bin/bash

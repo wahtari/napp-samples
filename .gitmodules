@@ -1,0 +1,3 @@
+[submodule "raw/person-detection-cpp/controller-libs"]
+	path = raw/person-detection-cpp/controller-libs
+	url = git@github.com:wahtari/controller-libs.git
