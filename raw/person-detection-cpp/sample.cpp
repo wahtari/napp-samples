@@ -16,7 +16,7 @@
 #include <condition_variable>
 
 #include <libnlab-ctrl.hpp>
-#include <VimbaCPP/Include/VimbaCPP.h>
+#include <VimbaCPP.h>
 
 #include "MJPEGStreamer.hpp"
 
@@ -540,7 +540,7 @@ int main(int argc, char* argv[]) {
         // Get a the list of available controllers.
         // Simply open the first one.
         vector<Info> infoList = Controller::list();
-        if infoList.size() == 0 {
+        if (infoList.size() == 0) {
             cout << "no controller found" << endl;
             return 2;
         }
@@ -554,7 +554,7 @@ int main(int argc, char* argv[]) {
             ctrl->setLEDStrobe(led.id, false);
             ctrl->setLEDBrightness(led.id, 20);
         }
-    } catch (const Exception& e) {
+    } catch (const nlab::ctrl::Exception& e) {
         cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 3;
     }
@@ -587,7 +587,7 @@ int main(int argc, char* argv[]) {
         for (const auto& led : leds) {
             ctrl->setLED(led.id, false);
         }
-    } catch (const Exception& e) {
+    } catch (const nlab::ctrl::Exception& e) {
         cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 4;
     }
