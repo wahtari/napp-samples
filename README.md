@@ -21,6 +21,16 @@ The sample implements the following things:
 ## nGin
 - TBA
 
+## Build
+Ensure to checkout the submodule repositories with:
+
+    git submodule init
+    git submodule update
+
+Build all targets with the [grml tool](https://github.com/desertbit/grml):
+
+    grml build
+
 ## Help  
 We have a dedicated [Wiki](https://wiki.wahtari.io) that serves as a helpful guide for most questions.  
 If you have problems the Wiki does not solve, you can create an issue here on GitHub, or write as an email to `support[at]wahtari.io`
