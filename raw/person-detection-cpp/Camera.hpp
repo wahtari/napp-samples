@@ -1,3 +1,10 @@
+/*
+ * Wahtari nApp Samples
+ * Copyright (c) 2021 Wahtari GmbH
+ *
+ * All source code in this file is subject to the included LICENSE file.
+ */
+
 #pragma once
 
 #include <atomic>

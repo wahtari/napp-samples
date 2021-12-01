@@ -2,7 +2,7 @@ env:
     GOPRIVATE:  git.wahtari.m
     DOCKERHOST: docker.wahtari.m
     DOCKERREPO: nlab
-    DOCKERVER:  v0.0.22
+    DOCKERVER:  v0.0.23
     BINDIR:     ${ROOT}/bin
     BUILDDIR:   ${ROOT}/build
 

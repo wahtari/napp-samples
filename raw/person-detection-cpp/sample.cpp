@@ -1,3 +1,10 @@
+/*
+ * Wahtari nApp Samples
+ * Copyright (c) 2021 Wahtari GmbH
+ *
+ * All source code in this file is subject to the included LICENSE file.
+ */
+
 #include <atomic>
 #include <string>
 #include <iostream>
@@ -22,7 +29,7 @@
 using namespace std::chrono;
 using namespace nlab;
 
-using std::string, std::cout, std::endl, std::flush;
+using std::string, std::cout, std::cerr, std::endl, std::flush;
 using std::atomic, std::mutex, std::unique_lock;
 using std::vector, std::thread, std::to_string;
 using cv::Mat, cv::Point, cv::Size, cv::Rect, cv::Scalar;
@@ -51,22 +58,15 @@ using nadjieb::MJPEGStreamer;
 //### Interrupts ###//
 //##################//
 
-mutex interruptMx;
-bool interrupt;
+std::atomic<bool> interrupt = false;
 
 void interruptHandler(int signum) {
-   interruptMx.lock();
-   interrupt = true;
-   cout << "Interrupted! Received signal "+to_string(signum)+". Stopping now..." << endl;
-   interruptMx.unlock();
+    interrupt = true;
+    cerr << "Interrupted! Received signal "+to_string(signum)+". Stopping now..." << endl;
 }
 
 bool interrupted() {
-    bool intr;
-    interruptMx.lock();
-    intr = interrupt;
-    interruptMx.unlock();
-    return intr;
+    return interrupt;
 }
 
 //################//
@@ -142,13 +142,13 @@ void jpegEncodeRoutine() {
         ok = jpegEncodeChan.read(mat, 100ms);
         if (!ok) {
             // No frame available.
-                continue;
+            continue;
         }
 
         // Draw detection results, if available.
         if (infResChan.read(boxes)) {
             for (i = 0; i < boxes.size(); ++i) {
-                rectangle(mat, boxes[i], boxColor);
+                cv::rectangle(mat, boxes[i], boxColor);
             }
             boxes.clear();
         }
@@ -293,7 +293,7 @@ int main(int argc, char* argv[]) {
         // Simply open the first one.
         vector<ctrl::Info> infoList = ctrl::Controller::list();
         if (infoList.size() == 0) {
-            cout << "no controller found" << endl;
+            cerr << "no controller found" << endl;
             return 2;
         }
 
@@ -302,12 +302,12 @@ int main(int argc, char* argv[]) {
 
         vector<ctrl::LED> leds = ctrl->getLEDs();
         for (const auto& led : leds) {
-            ctrl->setLED(led.id, true);
             ctrl->setLEDStrobe(led.id, false);
             ctrl->setLEDBrightness(led.id, 20);
+            ctrl->setLED(led.id, true);
         }
     } catch (const ctrl::Exception& e) {
-        cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
+        cerr << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 3;
     }
 
@@ -340,7 +340,7 @@ int main(int argc, char* argv[]) {
             ctrl->setLED(led.id, false);
         }
     } catch (const ctrl::Exception& e) {
-        cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
+        cerr << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 4;
     }
 
