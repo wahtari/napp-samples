@@ -1,13 +1,19 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 PROJECT("Wahtari Person Detection C++ Raw Sample")
 
+# OpenCV
 FIND_PACKAGE(OpenCV REQUIRED)
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
-LINK_DIRECTORIES(/usr/local/lib /work/controller-libs/cpp)
-ADD_EXECUTABLE(sample sample.cpp MJPEGStreamer.hpp controller-libs/cpp/libnlab-ctrl.hpp)
-TARGET_LINK_LIBRARIES(sample ${OpenCV_LIBS})
-TARGET_LINK_LIBRARIES(sample VimbaC VimbaCPP)
-TARGET_LINK_LIBRARIES(sample /lib/x86_64-linux-gnu/libpthread.so.0)
-TARGET_LINK_LIBRARIES(sample controller-libs/cpp/libnlab-ctrl.so)
-TARGET_LINK_LIBRARIES(sample controller-libs/cpp/libnlab-ctrl-cpp.so)
+# Wahtari nCam Controller Lib.
+set(nCamCtrl_C_DIR controller-libs/c)
+set(nCamCtrl_CPP_DIR controller-libs/cpp)
+INCLUDE_DIRECTORIES(${nCamCtrl_C_DIR} ${nCamCtrl_CPP_DIR})
+LINK_DIRECTORIES(${nCamCtrl_CPP_DIR})
+set(nCamCtrl_LIBS nlab-ctrl nlab-ctrl-cpp)
+
+# Vimba
+set(Vimba_LIBS VimbaC VimbaCPP)
+
+ADD_EXECUTABLE(sample sample.cpp)
+TARGET_LINK_LIBRARIES(sample pthread ${OpenCV_LIBS} ${nCamCtrl_LIBS} ${Vimba_LIBS})

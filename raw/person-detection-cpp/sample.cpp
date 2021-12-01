@@ -15,8 +15,9 @@
 #include <thread>
 #include <condition_variable>
 
-#include "libnlab-ctrl.hpp"
-#include "VimbaCPP/Include/VimbaCPP.h"
+#include <libnlab-ctrl.hpp>
+#include <VimbaCPP/Include/VimbaCPP.h>
+
 #include "MJPEGStreamer.hpp"
 
 using namespace std;
