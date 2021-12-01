@@ -1,30 +1,32 @@
 #include <atomic>
 #include <string>
-#include <cstring>
 #include <iostream>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/core.hpp>
-#include <opencv2/dnn/dnn.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/features2d.hpp>
-#include <opencv2/imgcodecs.hpp>
 #include <stdio.h>
-#include <csignal>
 #include <chrono>
 #include <queue>
 #include <thread>
 #include <condition_variable>
 
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/dnn/dnn.hpp>
+#include <opencv2/imgcodecs.hpp>
+
 #include <libnlab-ctrl.hpp>
-#include <VimbaCPP.h>
+#include <VimbaCPP/Include/VimbaCPP.h>
 
 #include "MJPEGStreamer.hpp"
+#include "BufferedChannel.hpp"
+#include "Camera.hpp"
 
-using namespace std;
-using namespace cv;
 using namespace std::chrono;
-using namespace nlab::ctrl;
-using MJPEGStreamer = nadjieb::MJPEGStreamer;
+using namespace nlab;
+
+using std::string, std::cout, std::endl, std::flush;
+using std::atomic, std::mutex, std::unique_lock;
+using std::vector, std::thread, std::to_string;
+using cv::Mat, cv::Point, cv::Size, cv::Rect, cv::Scalar;
+using nadjieb::MJPEGStreamer;
 
 // Maximum size of the inference channel.
 #define INFERENCE_CHANNEL_SIZE 3
@@ -71,46 +73,10 @@ bool interrupted() {
 //### Channels ###//
 //################//
 
-// The BufferedChannel is a thread-safe queue with a maximum size,
-// that offers an atomic read with an optional timeout.
-template<typename T>
-class BufferedChannel {
-public:
-    BufferedChannel(int size) : size_(size) { }
-
-    bool read(T& out, milliseconds timeout = milliseconds(0)) {
-        unique_lock<mutex> lock(mx_);
-        if (queue_.empty() && !cond_.wait_for(lock, timeout, [&]{ return queue_.size() > 0; })) {
-            // Nothing available.
-            return false;
-        }
-        
-        out = queue_.front();
-        queue_.pop();
-        return true;
-    }
-
-    void write(const T in) {
-        mx_.lock();
-        if (queue_.size() >= size_) {
-            queue_.pop();
-        }
-        queue_.push(in);
-        cond_.notify_one();
-        mx_.unlock();
-    }
-
-private:
-    mutex              mx_;
-    queue<T>           queue_;
-    condition_variable cond_;
-    int                size_;    
-};
-
-BufferedChannel<Mat>           jpegEncodeChan(JPEG_ENCODING_CHANNEL_SIZE);
-BufferedChannel<vector<uchar>> videoChan(VIDEO_CHANNEL_SIZE);
-BufferedChannel<Mat>           infChan(INFERENCE_CHANNEL_SIZE);
-BufferedChannel<vector<Rect>>  infResChan(INFERENCE_RESULT_CHANNEL_SIZE);
+samples::BufferedChannel<Mat>           jpegEncodeChan(JPEG_ENCODING_CHANNEL_SIZE);
+samples::BufferedChannel<vector<uchar>> videoChan(VIDEO_CHANNEL_SIZE);
+samples::BufferedChannel<Mat>           infChan(INFERENCE_CHANNEL_SIZE);
+samples::BufferedChannel<vector<Rect>>  infResChan(INFERENCE_RESULT_CHANNEL_SIZE);
 
 //################//
 //### Counters ###//
@@ -136,7 +102,7 @@ atomic<uint16_t> infFPSCurrent{0};
 void fpsRoutine() {
     while (!interrupted()) {
         // Wait for slightly less than 1s and then calculate the current fps.
-        this_thread::sleep_for(999ms);
+        std::this_thread::sleep_for(999ms);
 
         // Read the current fps counter and reset them to 0 simultaniously.
         infFPSCurrent = infFPSCounter.exchange(0);
@@ -161,12 +127,12 @@ void jpegEncodeRoutine() {
     int i;
     bool ok;
     
-    const vector<int> encodeParams = {IMWRITE_JPEG_QUALITY, 90};
+    const vector<int> encodeParams = {cv::IMWRITE_JPEG_QUALITY, 90};
     const auto textPos1 = Point(20, 40);
     const auto textPos2 = Point(20, 70);
     const auto textPos3 = Point(20, 100);
     const auto textPos4 = Point(20, 130);
-    const int fontType = FONT_HERSHEY_SIMPLEX;
+    const int fontType = cv::FONT_HERSHEY_SIMPLEX;
     const double fontScale = 0.9;
     const auto textColor = Scalar(0, 255);
     const int fontThickness = 2;
@@ -188,13 +154,13 @@ void jpegEncodeRoutine() {
         }
 
         // Draw FPS counter.
-        putText(mat, to_string(videoFPSCurrent) + " FPS",      textPos1, fontType, fontScale, textColor, fontThickness);
-        putText(mat, to_string(camFPSCurrent)   + " FPS Cam",  textPos2, fontType, fontScale, textColor, fontThickness);
-        putText(mat, to_string(jpegFPSCurrent)  + " FPS JPEG", textPos3, fontType, fontScale, textColor, fontThickness);
-        putText(mat, to_string(infFPSCurrent)   + " FPS Inf",  textPos4, fontType, fontScale, textColor, fontThickness);
+        cv::putText(mat, to_string(videoFPSCurrent) + " FPS",      textPos1, fontType, fontScale, textColor, fontThickness);
+        cv::putText(mat, to_string(camFPSCurrent)   + " FPS Cam",  textPos2, fontType, fontScale, textColor, fontThickness);
+        cv::putText(mat, to_string(jpegFPSCurrent)  + " FPS JPEG", textPos3, fontType, fontScale, textColor, fontThickness);
+        cv::putText(mat, to_string(infFPSCurrent)   + " FPS Inf",  textPos4, fontType, fontScale, textColor, fontThickness);
 
         // Encode and send to video routine.
-        imencode(".jpg", mat, buf, encodeParams);
+        cv::imencode(".jpg", mat, buf, encodeParams);
         videoChan.write(buf);
         jpegFPSCounter++;
     }
@@ -236,14 +202,14 @@ void videoRoutine() {
         videoChan.read(lastBuf, timeout);
 
         if (lastBuf.size() > 0) {
-            streamer.publish("/stream", string(lastBuf.begin(), lastBuf.end()));
+            streamer.publish("", string(lastBuf.begin(), lastBuf.end()));
             videoFPSCounter++;
         }
 
         // Wait remaining time of interval.
         remaining = interval - (duration_cast<milliseconds>(system_clock::now().time_since_epoch()) - start);
         if (remaining > 0ns) {
-            this_thread::sleep_for(remaining);
+            std::this_thread::sleep_for(remaining);
         }
     }
 }
@@ -289,230 +255,16 @@ void inferenceRoutine(string model_path, string config_path) {
     }
 }
 
-//##############//
-//### Camera ###//
-//##############//
+//#############################//
+//### Camera Frame Callback ###//
+//#############################//
 
-// vimbaErrorCodeMessage converts the given vimba error type to a human-readable string.
-// Copied from VimbaExamples' file "ErrorCodeToMessage.h"
-string vimbaErrorCodeMessage(VmbErrorType err) {
-    switch(err) {
-    case VmbErrorSuccess:        return "Success.";
-    case VmbErrorInternalFault:  return "Unexpected fault in VmbApi or driver.";
-    case VmbErrorApiNotStarted:  return "API not started.";
-    case VmbErrorNotFound:       return "Not found.";
-    case VmbErrorBadHandle:      return "Invalid handle ";
-    case VmbErrorDeviceNotOpen:  return "Device not open.";
-    case VmbErrorInvalidAccess:  return "Invalid access.";
-    case VmbErrorBadParameter:   return "Bad parameter.";
-    case VmbErrorStructSize:     return "Wrong DLL version.";
-    case VmbErrorMoreData:       return "More data  returned than memory provided.";
-    case VmbErrorWrongType:      return "Wrong type.";
-    case VmbErrorInvalidValue:   return "Invalid value.";
-    case VmbErrorTimeout:        return "Timeout.";
-    case VmbErrorOther:          return "TL error.";
-    case VmbErrorResources:      return "Resource not available.";
-    case VmbErrorInvalidCall:    return "Invalid call.";
-    case VmbErrorNoTL:           return "TL not loaded.";
-    case VmbErrorNotImplemented: return "Not implemented.";
-    case VmbErrorNotSupported:   return "Not supported.";
-    default:                     return "Unknown";
-    }
-}
-
-// avtErrorCheck checks, if the given vimba error type indicates a successful operation.
-// If not, a runtime_error exception is thrown, with the given msg as prefix and the vimba error code message.
-void avtErrorCheck(const VmbErrorType err, const string& msg) {
-    if (err != VmbErrorSuccess) {
-        throw runtime_error(msg + ": " + vimbaErrorCodeMessage(err));
-    }
-}
-
-// The FrameObserver class implements the vimba IFrameObserver interface and provides
-// a callback to handle new frames read off of the camera.
-class FrameObserver : public AVT::VmbAPI::IFrameObserver {
-public:
-    FrameObserver(AVT::VmbAPI::CameraPtr cam, VmbPixelFormatType pxFmt);
-
-    // FrameReceived is the callback that handles newly read frames.
-    // We convert the frame to an OpenCV Mat and distribute it to both the 
-    // jpeg encoding routines, as well as the inference routines.
-    void FrameReceived(const AVT::VmbAPI::FramePtr frame);
-
-private:
-    AVT::VmbAPI::CameraPtr cam_;
-    VmbPixelFormatType     pxFmt_;
-};
-
-FrameObserver::FrameObserver(AVT::VmbAPI::CameraPtr cam, VmbPixelFormatType pxFmt) : 
-    IFrameObserver(cam),
-    cam_(cam),
-    pxFmt_(pxFmt)
-{}
-
-void FrameObserver::FrameReceived(const AVT::VmbAPI::FramePtr frame) {
-    if (frame == nullptr) {
-        cout << "frameReceived: frame was null" << endl;
-        return;
-    }
-
-    // Convert frame to a OpenCV matrix.
-    // Retrieve size and image.
-    VmbUint32_t nImageSize = 0; 
-    VmbErrorType err = frame->GetImageSize(nImageSize);
-    if (err != VmbErrorSuccess) {
-        cout << "frameReceived: get image size " << vimbaErrorCodeMessage(err) << endl;
-        return;
-    }
-    VmbUint32_t nWidth = 0;
-    err = frame->GetWidth(nWidth);
-    if (err != VmbErrorSuccess) {
-        cout << "frameReceived: get width " << vimbaErrorCodeMessage(err) << endl;
-        return;
-    }
-    VmbUint32_t nHeight = 0;
-    err = frame->GetHeight(nHeight);
-    if (err != VmbErrorSuccess) {
-        cout << "frameReceived: get height " << vimbaErrorCodeMessage(err) << endl;
-        return;
-    }
-    VmbUchar_t* pImage = NULL;
-    err = frame->GetImage(pImage);
-    if (err != VmbErrorSuccess) {
-        cout << "frameReceived: get image " << vimbaErrorCodeMessage(err) << endl;
-        return;
-    }
-
-    // convert image to OpenCV Mat.
-    int srcType;
-    if (pxFmt_ == VmbPixelFormatMono8 || pxFmt_ == VmbPixelFormatBayerRG8) {
-        srcType = CV_8UC1;
-    } else {
-        srcType = CV_8UC3;
-    }
-    Mat mat(Size(nWidth, nHeight), srcType, (void*)pImage);
-
-    // Queue frame back to camera for next acquisition.
-    cam_->QueueFrame(frame);
-
-    // Resize and convert, if necessary.
-    if (pxFmt_ == VmbPixelFormatBayerRG8) {
-        cvtColor(mat, mat, COLOR_BayerRG2RGB_EA); // Hint: 2RGB ist required for a valid BGR image. This seems to be an OpenCV bug.
-    }
-    resize(mat, mat, Size(), 0.5, 0.5, 0);
-
+void cameraFrameCallback(const cv::Mat& mat) {
     // Send the frame to both the encoding and inference routine.
     jpegEncodeChan.write(mat);
     infChan.write(mat);
+    // Increment the counter.
     camFPSCounter++;
-}
-
-// The Camera class is a thin wrapper around a vimba Camera.
-// It encapsulates the setup and teardown code and provides easy to use methods
-// to quickly get a camera up and running.
-// This class is not thread-safe.
-class Camera {
-public:
-    Camera();
-    ~Camera();
-
-    // printSystemVersion prints the semver version of the Vimba SDK.
-    void printSystemVersion();
-    // start opens the first found camera and starts the image acquisition on it.
-    bool start();
-    // stop stops the image acquisition of the started camera.
-    // It is valid to call stop multiple times. 
-    // The destructor makes sure to call stop as well.
-    void stop();
-
-private:
-    AVT::VmbAPI::VimbaSystem& avtSystem_;
-    AVT::VmbAPI::CameraPtr    avt_;
-    bool                      opened_;
-    bool                      grabbing_;
-};
-
-Camera::Camera() : 
-    avtSystem_(AVT::VmbAPI::VimbaSystem::GetInstance()),
-    opened_(false),
-    grabbing_(false)
-{
-    // Start Vimba.
-    avtErrorCheck(avtSystem_.Startup(), "vimba system startup");
-}
-
-Camera::~Camera() {
-    stop();
-    avtSystem_.Shutdown();
-    cout << "Vimba closed" << endl << flush;
-}
-
-void Camera::printSystemVersion() {
-    // Print Vimba version.
-    VmbVersionInfo_t info;
-    avtErrorCheck(avtSystem_.QueryVersion(info), "vimba query version");
-    cout << "Vimba C++ API Version " << info.major << "." << info.minor << "." << info.patch << endl;
-}
-
-bool Camera::start() {
-    // Retrieve a list of found cameras.
-    string camID;
-    AVT::VmbAPI::CameraPtrVector cams;
-    avtErrorCheck(avtSystem_.GetCameras(cams), "vimba get cameras");
-    if (cams.size() <= 0) {
-        cout << "no camera found" << endl;
-        return false;
-    }
-
-    // Open the first camera for now.
-    avtErrorCheck(cams[0]->GetID(camID), "vimba cam get id");
-    avtErrorCheck(avtSystem_.OpenCameraByID(camID.c_str(), VmbAccessModeFull, avt_), "vimba open camera by id");
-    opened_ = true;
-
-    // Set pixel format.
-    AVT::VmbAPI::FeaturePtr pxFmtFtr;
-    avtErrorCheck(avt_->GetFeatureByName("PixelFormat", pxFmtFtr), "vimba get pixel format");
-
-    // Try to set BayerRG8, then BGR, then Mono.
-    VmbPixelFormatType pxFmt = VmbPixelFormatBayerRG8;
-    VmbErrorType err = pxFmtFtr->SetValue(pxFmt);
-    if (err != VmbErrorSuccess) {
-        pxFmt = VmbPixelFormatBgr8;
-        err = pxFmtFtr->SetValue(pxFmt);
-        if (err != VmbErrorSuccess) {
-            // Fall back to Mono.
-            pxFmt = VmbPixelFormatMono8;
-            avtErrorCheck(pxFmtFtr->SetValue(pxFmt), "vimba set pixel format");
-        }
-    }
-
-    // Set auto exposure.
-    AVT::VmbAPI::FeaturePtr expAutoFtr;
-    avtErrorCheck(avt_->GetFeatureByName("ExposureAuto", expAutoFtr), "vimba get exposure auto");
-    avtErrorCheck(expAutoFtr->SetValue("Continuous"), "vimba set exposure auto");
-
-    // Create FrameObserver and start asynchronous image acquisiton.
-    err = avt_->StartContinuousImageAcquisition(MAX_FRAME_BUFFERS, AVT::VmbAPI::IFrameObserverPtr(new FrameObserver(avt_, pxFmt)));
-    avtErrorCheck(err, "vimba start continuous image acquisition");
-    grabbing_ = true;
-
-    return true;
-}
-
-void Camera::stop() {
-    if (!opened_) {
-        return;
-    }
-
-    // Stop image acquisition.
-    if (grabbing_) {
-        avt_->StopContinuousImageAcquisition();
-        grabbing_ = false;
-    }
-
-    avt_->Close();
-    cout << "Camera closed" << endl;
-    opened_ = false;
 }
 
 //############//
@@ -524,37 +276,37 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, interruptHandler);
     signal(SIGTERM, interruptHandler);
 
-    // Create Vimba camera.
-    Camera cam = Camera();
+    // Create camera.
+    samples::Camera cam = samples::Camera();
     cam.printSystemVersion();
 
     // Start the camera.
-    bool ok = cam.start();
+    bool ok = cam.start(MAX_FRAME_BUFFERS, cameraFrameCallback);
     if (!ok) {
         return 1;
     }
 
     // Open the Controller and switch on all LEDs to 20% brightness.
-    Controller::Ptr ctrl;
+    ctrl::Controller::Ptr ctrl;
     try {
         // Get a the list of available controllers.
         // Simply open the first one.
-        vector<Info> infoList = Controller::list();
+        vector<ctrl::Info> infoList = ctrl::Controller::list();
         if (infoList.size() == 0) {
             cout << "no controller found" << endl;
             return 2;
         }
 
         // Open the controller.
-        ctrl = Controller::open(infoList[0].backendID, infoList[0].devPath, {.stateDir = "/tmp/nlab-ctrl-state"});
+        ctrl = ctrl::Controller::open(infoList[0].backendID, infoList[0].devPath, {.stateDir = "/tmp/nlab-ctrl-state"});
 
-        vector<LED> leds = ctrl->getLEDs();
+        vector<ctrl::LED> leds = ctrl->getLEDs();
         for (const auto& led : leds) {
             ctrl->setLED(led.id, true);
             ctrl->setLEDStrobe(led.id, false);
             ctrl->setLEDBrightness(led.id, 20);
         }
-    } catch (const nlab::ctrl::Exception& e) {
+    } catch (const ctrl::Exception& e) {
         cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 3;
     }
@@ -583,11 +335,11 @@ int main(int argc, char* argv[]) {
     cout << "All threads gracefully exited" << endl;
 
     try {
-        vector<LED> leds = ctrl->getLEDs();
+        vector<ctrl::LED> leds = ctrl->getLEDs();
         for (const auto& led : leds) {
             ctrl->setLED(led.id, false);
         }
-    } catch (const nlab::ctrl::Exception& e) {
+    } catch (const ctrl::Exception& e) {
         cout << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
         return 4;
     }
