@@ -9,3 +9,5 @@ COPY model/person-detection-0200.xml /model.xml
 COPY sample /sample
 
 ENTRYPOINT ["/sample"]
+
+RUN ldconfig || true

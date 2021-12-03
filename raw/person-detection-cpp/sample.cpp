@@ -202,7 +202,7 @@ void videoRoutine() {
         videoChan.read(lastBuf, timeout);
 
         if (lastBuf.size() > 0) {
-            streamer.publish("", string(lastBuf.begin(), lastBuf.end()));
+            streamer.publish("/stream", string(lastBuf.begin(), lastBuf.end()));
             videoFPSCounter++;
         }
 
@@ -344,5 +344,6 @@ int main(int argc, char* argv[]) {
         return 4;
     }
 
+    ctrl->close();
     return 0;
 }
