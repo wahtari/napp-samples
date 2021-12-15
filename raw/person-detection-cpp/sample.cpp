@@ -308,6 +308,9 @@ int main(int argc, char* argv[]) {
         }
     } catch (const ctrl::Exception& e) {
         cerr << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
+        if (ctrl != nullptr) {
+            ctrl->close();
+        }
         return 3;
     }
 
@@ -341,6 +344,9 @@ int main(int argc, char* argv[]) {
         }
     } catch (const ctrl::Exception& e) {
         cerr << "controller exception! code: " << to_string(e.code()) << ", message: " << e.what() << endl;
+        if (ctrl != nullptr) {
+            ctrl->close();
+        }
         return 4;
     }
 

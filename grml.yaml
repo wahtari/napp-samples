@@ -32,6 +32,35 @@ commands:
         deps: 
             - build.raw
         commands:
+            myriad-bug-report:
+                help: build the myriad bug report.
+                exec: |
+                    . scripts/grml.sh
+
+                    # Build the sample application.
+                    DIR=myriad-bug-report
+                    
+                    # Does not work.
+                    #docker run --rm --interactive \
+                    #    --net host \
+                    #    -v "${ROOT}":/work \
+                    #    -v "${BUILDDIR}/${builder}":/work/build \
+                    #    -v "${BINDIR}/${builder}":/work/bin \
+                    #    openvino/ubuntu20_dev:latest \
+                    #        cmake -S /work/${DIR} -B /work/build/${DIR} && \
+                    #        (cd /work/build/${DIR} && make) && \
+                    #        cp /work/build/${DIR}/sample /work/${DIR} \
+
+                    docker build \
+                        --tag myriad-bug-report \
+                        "${ROOT}/myriad-bug-report"
+
+                    # Save the docker container as tar archive.
+                    docker save \
+                        --output "${BINDIR}/${builder}/myriad-bug-report.docker.tar" \
+                        myriad-bug-report
+
+                    # docker run -it --device-cgroup-rule='c 189:* rmw' -v /dev/bus/usb:/dev/bus/usb --rm openvino/ubuntu20_dev:latest 
             raw:
                 help: build all raw targets.
                 deps:
