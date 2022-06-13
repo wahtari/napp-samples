@@ -1,8 +1,14 @@
+version: 1
+project: nlab-samples
+
+import:
+    - scripts/grml.sh
+
 env:
     GOPRIVATE:  git.wahtari.m
     DOCKERHOST: docker.wahtari.m
     DOCKERREPO: nlab
-    DOCKERVER:  v0.0.24
+    DOCKERVER:  v0.0.28
     BINDIR:     ${ROOT}/bin
     BUILDDIR:   ${ROOT}/build
 
@@ -35,8 +41,6 @@ commands:
             myriad-bug-report:
                 help: build the myriad bug report.
                 exec: |
-                    . scripts/grml.sh
-
                     # Build the sample application.
                     DIR=myriad-bug-report
                     
@@ -69,8 +73,6 @@ commands:
                     person-detection-cpp:
                         help: build the person detection C++ raw sample.
                         exec: |
-                            . scripts/grml.sh
-
                             # Build the sample application.
                             DIR=raw/person-detection-cpp
                             sandbox /bin/bash -c "\
@@ -93,5 +95,4 @@ commands:
     run:
         help: run commands
         exec: |
-            . scripts/grml.sh
             sandboxRun /bin/bash
